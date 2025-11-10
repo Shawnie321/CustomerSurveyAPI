@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using CustomerSurveyAPI.Data;
+﻿using CustomerSurveyAPI.DTOs;
 using CustomerSurveyAPI.Models;
-using Microsoft.EntityFrameworkCore;
+using CustomerSurveyAPI.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -13,20 +13,20 @@ namespace CustomerSurveyAPI.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IUserService _userService;
         private readonly IConfiguration _config;
 
-        public AuthController(AppDbContext context, IConfiguration config)
+        public AuthController(IUserService userService, IConfiguration config)
         {
-            _context = context;
+            _userService = userService;
             _config = config;
         }
 
         // ---------- USER REGISTRATION ----------
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] User userRequest)
+        public async Task<IActionResult> Register(UserCreateDto userRequest)
         {
-            if (await _context.Users.AnyAsync(u => u.Username == userRequest.Username))
+            if (await _userService.GetByUsernameAsync(userRequest.Username) != null)
                 return BadRequest("Username already exists");
 
             var user = new User
@@ -36,17 +36,16 @@ namespace CustomerSurveyAPI.Controllers
                 Role = "User"
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+            await _userService.CreateAsync(user);
 
             return Ok("User registered successfully");
         }
 
         // ---------- ADMIN REGISTRATION ----------
         [HttpPost("register-admin")]
-        public async Task<IActionResult> RegisterAdmin([FromBody] User adminRequest)
+        public async Task<IActionResult> RegisterAdmin(UserCreateDto adminRequest)
         {
-            if (await _context.Users.AnyAsync(u => u.Username == adminRequest.Username))
+            if (await _userService.GetByUsernameAsync(adminRequest.Username) != null)
                 return BadRequest("Username already exists");
 
             var admin = new User
@@ -56,19 +55,24 @@ namespace CustomerSurveyAPI.Controllers
                 Role = "Admin"
             };
 
-            _context.Users.Add(admin);
-            await _context.SaveChangesAsync();
+            await _userService.CreateAsync(admin);
 
             return Ok("Admin registered successfully");
         }
 
         // ---------- LOGIN ----------
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] User loginRequest)
+        public class LoginRequest
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == loginRequest.Username);
+            public string Username { get; set; } = "";
+            public string Password { get; set; } = ""; // plain password in request
+        }
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.PasswordHash, user.PasswordHash))
+        [HttpPost("login")]
+        public async Task<IActionResult> Login(LoginRequest loginRequest)
+        {
+            var user = await _userService.GetByUsernameAsync(loginRequest.Username);
+
+            if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.Password, user.PasswordHash))
                 return Unauthorized("Invalid username or password");
 
             var token = GenerateJwtToken(user);
@@ -80,7 +84,11 @@ namespace CustomerSurveyAPI.Controllers
         private string GenerateJwtToken(User user)
         {
             var jwtSettings = _config.GetSection("Jwt");
-            var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
+            var keyString = jwtSettings["Key"];
+            if (string.IsNullOrEmpty(keyString))
+                throw new InvalidOperationException("JWT Key is not configured.");
+
+            var key = Encoding.UTF8.GetBytes(keyString);
 
             var claims = new List<Claim>
             {

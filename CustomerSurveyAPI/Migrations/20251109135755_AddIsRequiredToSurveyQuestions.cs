@@ -5,7 +5,7 @@
 namespace CustomerSurveyAPI.Migrations
 {
     /// <inheritdoc />
-    public partial class AddAnalyticsSupport : Migration
+    public partial class AddIsRequiredToSurveyQuestions : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

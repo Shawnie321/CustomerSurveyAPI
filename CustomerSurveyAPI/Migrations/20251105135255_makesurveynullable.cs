@@ -5,7 +5,7 @@
 namespace CustomerSurveyAPI.Migrations
 {
     /// <inheritdoc />
-    public partial class makesurveynullable : Migration
+    public partial class MakeSurveyNullable : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
-using CustomerSurveyAPI.Data;
+﻿using AutoMapper;
+using CustomerSurveyAPI.DTOs;
 using CustomerSurveyAPI.Models;
+using CustomerSurveyAPI.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CustomerSurveyAPI.Controllers
 {
@@ -10,125 +11,103 @@ namespace CustomerSurveyAPI.Controllers
     [Route("api/surveys/{surveyId}/responses")]
     public class SurveyResponsesController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly ISurveyResponseService _responseService;
+        private readonly ISurveyService _surveyService;
+        private readonly ISurveyQuestionService _questionService;
+        private readonly IMapper _mapper;
+        private const string PrivacyQuestionText = "Do you agree to the privacy terms and conditions?";
 
-        public SurveyResponsesController(AppDbContext context)
+        public SurveyResponsesController(ISurveyResponseService responseService, ISurveyService surveyService, ISurveyQuestionService questionService, IMapper mapper)
         {
-            _context = context;
+            _responseService = responseService;
+            _surveyService = surveyService;
+            _questionService = questionService;
+            _mapper = mapper;
         }
 
         // ---------- GET RESPONSES (Admin only) ----------
         [Authorize(Roles = "Admin")]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<SurveyResponseDto>>> GetResponses(int surveyId)
+        public async Task<ActionResult<IEnumerable<SurveyResponseReadDto>>> GetResponses(int surveyId)
         {
-            var surveyExists = await _context.Surveys.AnyAsync(s => s.Id == surveyId);
-            if (!surveyExists) return NotFound("Survey not found.");
+            var survey = await _surveyService.GetByIdAsync(surveyId);
+            if (survey == null) return NotFound("Survey not found.");
 
-            var responses = await _context.SurveyResponses
-                .Where(r => r.SurveyId == surveyId)
-                .Include(r => r.Answers)
-                    .ThenInclude(a => a.SurveyQuestion)
-                .OrderByDescending(r => r.SubmittedAt)
-                .ToListAsync();
+            var responses = await _responseService.GetBySurveyIdAsync(surveyId);
 
-            var result = responses.Select(r => new SurveyResponseDto
-            {
-                Id = r.Id,
-                SurveyId = r.SurveyId,
-                Username = r.Username,
-                SubmittedAt = r.SubmittedAt,
-                Answers = r.Answers.Select(a => new SurveyAnswerDto
-                {
-                    Id = a.Id,
-                    QuestionId = a.QuestionId,
-                    QuestionText = a.SurveyQuestion?.QuestionText,
-                    AnswerText = a.AnswerText,
-                    RatingValue = a.RatingValue
-                }).ToList()
-            });
+            var result = responses.Select(r => _mapper.Map<SurveyResponseReadDto>(r));
 
             return Ok(result);
         }
 
         // ---------- SUBMIT A RESPONSE ----------
-        // Accept a compact payload to avoid requiring navigation properties
-        public class SubmitAnswerRequest
-        {
-            public int QuestionId { get; set; }
-            public string? AnswerText { get; set; }
-            public int? RatingValue { get; set; }
-        }
-
-        public class SubmitResponseRequest
-        {
-            public string Username { get; set; } = "Anonymous";
-            public List<SubmitAnswerRequest>? Answers { get; set; }
-        }
-
         [HttpPost]
-        public async Task<IActionResult> PostResponse(int surveyId, [FromBody] SubmitResponseRequest input)
+        public async Task<IActionResult> PostResponse(int surveyId, [FromBody] SubmitResponseDto input)
         {
             if (input == null) return BadRequest("Invalid payload.");
 
-            var survey = await _context.Surveys.FindAsync(surveyId);
+            var survey = await _surveyService.GetByIdAsync(surveyId);
             if (survey == null) return NotFound("Survey not found.");
 
             // Optional: validate question IDs exist and belong to this survey
-            var questionIds = (input.Answers ?? Enumerable.Empty<SubmitAnswerRequest>())
+            var questionIds = (input.Answers ?? Enumerable.Empty<SubmitAnswerDto>())
                                 .Select(a => a.QuestionId)
                                 .Distinct()
                                 .ToList();
 
+            var surveyQuestionIds = survey.Questions.Select(q => q.Id).ToHashSet();
+
             if (questionIds.Any())
             {
-                var validCount = await _context.SurveyQuestions
-                    .Where(q => questionIds.Contains(q.Id) && q.SurveyId == surveyId)
-                    .CountAsync();
-
-                if (validCount != questionIds.Count)
+                if (!questionIds.All(id => surveyQuestionIds.Contains(id)))
                     return BadRequest("One or more question IDs are invalid for this survey.");
             }
 
-            var response = new SurveyResponse
-            {
-                SurveyId = surveyId,
-                Username = input.Username,
-                SubmittedAt = DateTime.UtcNow,
-                Answers = new List<SurveyAnswer>()
-            };
+            // Enforce required questions are present and answered
+            var requiredQuestions = survey.Questions
+                .Where(q => q.IsRequired)
+                .Select(q => new { q.Id, q.QuestionType, q.QuestionText })
+                .ToList();
 
-            if (input.Answers != null)
+            if (requiredQuestions.Any())
             {
-                foreach (var a in input.Answers)
+                var answersDict = (input.Answers ?? Enumerable.Empty<SubmitAnswerDto>())
+                                    .ToDictionary(a => a.QuestionId, a => a);
+
+                foreach (var rq in requiredQuestions)
                 {
-                    response.Answers.Add(new SurveyAnswer
+                    if (!answersDict.TryGetValue(rq.Id, out var provided))
+                        return BadRequest($"Answer required for question id {rq.Id} ('{rq.QuestionText}').");
+
+                    if (rq.QuestionType.Equals("Rating", StringComparison.OrdinalIgnoreCase))
                     {
-                        QuestionId = a.QuestionId,
-                        AnswerText = string.IsNullOrWhiteSpace(a.AnswerText) ? null : a.AnswerText,
-                        RatingValue = a.RatingValue
-                    });
+                        if (provided.RatingValue == null)
+                            return BadRequest($"Answer required for rating question id {rq.Id} ('{rq.QuestionText}').");
+                    }
+                    else
+                    {
+                        if (string.IsNullOrWhiteSpace(provided.AnswerText))
+                            return BadRequest($"Answer required for question id {rq.Id} ('{rq.QuestionText}').");
+                    }
                 }
             }
 
-            _context.SurveyResponses.Add(response);
-            await _context.SaveChangesAsync();
+            var response = _mapper.Map<SurveyResponse>(input);
+            response.SurveyId = surveyId;
+            response.SubmittedAt = DateTime.UtcNow;
 
-            var createdDto = new SurveyResponseDto
+            // ensure answers are sanitized
+            if (response.Answers != null)
             {
-                Id = response.Id,
-                SurveyId = response.SurveyId,
-                Username = response.Username,
-                SubmittedAt = response.SubmittedAt,
-                Answers = response.Answers.Select(a => new SurveyAnswerDto
+                foreach (var a in response.Answers)
                 {
-                    Id = a.Id,
-                    QuestionId = a.QuestionId,
-                    QuestionText = null, // Question text not loaded here
-                    AnswerText = a.AnswerText,
-                    RatingValue = a.RatingValue
-                }).ToList()
-            };
+                    a.AnswerText = string.IsNullOrWhiteSpace(a.AnswerText) ? null : a.AnswerText;
+                }
+            }
+
+            var created = await _responseService.CreateAsync(response);
+
+            var createdDto = _mapper.Map<SurveyResponseReadDto>(created);
 
             return CreatedAtAction(nameof(GetResponses), new { surveyId = surveyId }, createdDto);
         }
@@ -138,42 +117,14 @@ namespace CustomerSurveyAPI.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteResponse(int surveyId, int id)
         {
-            var response = await _context.SurveyResponses
-                .FirstOrDefaultAsync(r => r.SurveyId == surveyId && r.Id == id);
+            var response = await _responseService.GetByIdAsync(id);
 
-            if (response == null) return NotFound();
+            if (response == null || response.SurveyId != surveyId) return NotFound();
 
-            // Remove answers first (cascade should do it but be explicit)
-            var answers = await _context.SurveyAnswers
-                .Where(a => a.SurveyResponseId == response.Id)
-                .ToListAsync();
-
-            if (answers.Any())
-                _context.SurveyAnswers.RemoveRange(answers);
-
-            _context.SurveyResponses.Remove(response);
-            await _context.SaveChangesAsync();
+            var deleted = await _responseService.DeleteAsync(id);
+            if (!deleted) return NotFound();
 
             return NoContent();
-        }
-
-        // DTOs
-        public class SurveyResponseDto
-        {
-            public int Id { get; set; }
-            public int SurveyId { get; set; }
-            public string Username { get; set; } = "";
-            public DateTime SubmittedAt { get; set; }
-            public List<SurveyAnswerDto> Answers { get; set; } = new();
-        }
-
-        public class SurveyAnswerDto
-        {
-            public int Id { get; set; }
-            public int QuestionId { get; set; }
-            public string? QuestionText { get; set; }
-            public string? AnswerText { get; set; }
-            public int? RatingValue { get; set; }
         }
     }
 }

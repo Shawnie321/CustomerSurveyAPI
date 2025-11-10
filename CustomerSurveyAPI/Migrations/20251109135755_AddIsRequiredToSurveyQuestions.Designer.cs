@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CustomerSurveyAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251105135255_makesurveynullable")]
-    partial class MakeSurveyNullable
+    [Migration("20251109135755_AddIsRequiredToSurveyQuestions")]
+    partial class AddIsRequiredToSurveyQuestions
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -92,6 +92,9 @@ namespace CustomerSurveyAPI.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Options")
                         .HasColumnType("text");
@@ -174,7 +177,7 @@ namespace CustomerSurveyAPI.Migrations
             modelBuilder.Entity("CustomerSurveyAPI.Models.SurveyAnswer", b =>
                 {
                     b.HasOne("CustomerSurveyAPI.Models.SurveyQuestion", "SurveyQuestion")
-                        .WithMany()
+                        .WithMany("Answers")
                         .HasForeignKey("QuestionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -217,6 +220,11 @@ namespace CustomerSurveyAPI.Migrations
                     b.Navigation("Questions");
 
                     b.Navigation("Responses");
+                });
+
+            modelBuilder.Entity("CustomerSurveyAPI.Models.SurveyQuestion", b =>
+                {
+                    b.Navigation("Answers");
                 });
 
             modelBuilder.Entity("CustomerSurveyAPI.Models.SurveyResponse", b =>

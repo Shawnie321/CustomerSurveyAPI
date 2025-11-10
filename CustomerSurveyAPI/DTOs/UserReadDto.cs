@@ -1,13 +1,10 @@
-﻿namespace CustomerSurveyAPI.Models
+﻿namespace CustomerSurveyAPI.DTOs
 {
-    public class User
+    public class UserReadDto
     {
         public int Id { get; set; }
 
         public string Username { get; set; } = null!;
-
-        // store only the hash, never the plain password
-        public string PasswordHash { get; set; } = null!;
 
         public string Role { get; set; } = "User";
 

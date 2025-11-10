@@ -1,22 +1,16 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
-namespace CustomerSurveyAPI.Models
+﻿namespace CustomerSurveyAPI.Models
 {
     public class Survey
     {
         public int Id { get; set; }
 
-        [Required, StringLength(100)]
-        public string Title { get; set; }
+        public string Title { get; set; } = null!;
 
-        [StringLength(500)]
-        public string Description { get; set; }
+        public string Description { get; set; } = null!;
 
-        [Required]
-        public string CreatedBy { get; set; }
+        public string CreatedBy { get; set; } = null!;
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; }
 
         // Navigation properties
         public ICollection<SurveyQuestion> Questions { get; set; } = new List<SurveyQuestion>();

@@ -1,8 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using CustomerSurveyAPI.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
-using CustomerSurveyAPI.Data;
-using CustomerSurveyAPI.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CustomerSurveyAPI.Controllers
 {
@@ -10,11 +8,11 @@ namespace CustomerSurveyAPI.Controllers
     [Route("api/[controller]")]
     public class AnalyticsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly ISurveyService _surveyService;
 
-        public AnalyticsController(AppDbContext context)
+        public AnalyticsController(ISurveyService surveyService)
         {
-            _context = context;
+            _surveyService = surveyService;
         }
 
         // ---------- GET ANALYTICS FOR A SURVEY ----------
@@ -22,10 +20,7 @@ namespace CustomerSurveyAPI.Controllers
         [HttpGet("{surveyId}")]
         public async Task<IActionResult> GetSurveyAnalytics(int surveyId)
         {
-            var survey = await _context.Surveys
-                .Include(s => s.Responses)
-                    .ThenInclude(r => r.Answers)
-                .FirstOrDefaultAsync(s => s.Id == surveyId);
+            var survey = await _surveyService.GetByIdAsync(surveyId);
 
             if (survey == null)
                 return NotFound("Survey not found.");
@@ -33,7 +28,7 @@ namespace CustomerSurveyAPI.Controllers
             var allRatings = survey.Responses
                 .SelectMany(r => r.Answers)
                 .Where(a => a.RatingValue.HasValue)
-                .Select(a => a.RatingValue.Value)
+                .Select(a => a.RatingValue.GetValueOrDefault())
                 .ToList();
 
             var average = allRatings.Any() ? allRatings.Average() : 0;
@@ -47,7 +42,7 @@ namespace CustomerSurveyAPI.Controllers
             {
                 QuestionId = q.Id,
                 q.QuestionText,
-                AverageRating = q.Answers.Where(a => a.RatingValue.HasValue).Select(a => a.RatingValue.Value).DefaultIfEmpty(0).Average(),
+                AverageRating = q.Answers.Where(a => a.RatingValue.HasValue).Select(a => a.RatingValue.GetValueOrDefault()).DefaultIfEmpty(0).Average(),
                 ResponseCount = q.Answers.Count,
                 Type = q.QuestionType
             });

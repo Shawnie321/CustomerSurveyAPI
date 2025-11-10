@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
-using CustomerSurveyAPI.Data;
 using CustomerSurveyAPI.Models;
+using CustomerSurveyAPI.DTOs;
+using CustomerSurveyAPI.Services;
 
 namespace CustomerSurveyAPI.Controllers
 {
@@ -10,32 +10,34 @@ namespace CustomerSurveyAPI.Controllers
     [Route("api/surveys/{surveyId}/questions")]
     public class SurveyQuestionsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly ISurveyQuestionService _questionService;
+        private readonly ISurveyAnswerService _answerService;
+        private readonly ISurveyService _surveyService;
 
-        public SurveyQuestionsController(AppDbContext context)
+        public SurveyQuestionsController(ISurveyQuestionService questionService, ISurveyAnswerService answerService, ISurveyService surveyService)
         {
-            _context = context;
+            _questionService = questionService;
+            _answerService = answerService;
+            _surveyService = surveyService;
         }
 
         // GET /api/surveys/{surveyId}/questions
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<QuestionDto>>> GetQuestions(int surveyId)
+        public async Task<ActionResult<IEnumerable<SurveyQuestionReadDto>>> GetQuestions(int surveyId)
         {
-            var surveyExists = await _context.Surveys.AnyAsync(s => s.Id == surveyId);
-            if (!surveyExists) return NotFound("Survey not found.");
+            var survey = await _surveyService.GetByIdAsync(surveyId);
+            if (survey == null) return NotFound("Survey not found.");
 
-            var questions = await _context.SurveyQuestions
-                .Where(q => q.SurveyId == surveyId)
-                .Include(q => q.Answers)
-                .OrderBy(q => q.Id)
-                .ToListAsync();
+            var questions = await _questionService.GetBySurveyIdAsync(surveyId);
 
-            var result = questions.Select(q => new QuestionDto
+            var result = questions.Select(q => new SurveyQuestionReadDto
             {
                 Id = q.Id,
+                SurveyId = q.SurveyId,
                 QuestionText = q.QuestionText,
                 QuestionType = q.QuestionType,
                 Options = q.Options,
+                IsRequired = q.IsRequired,
                 AnswerCount = q.Answers?.Count ?? 0
             });
 
@@ -45,9 +47,9 @@ namespace CustomerSurveyAPI.Controllers
         // POST /api/surveys/{surveyId}/questions  (Admin)
         [Authorize(Roles = "Admin")]
         [HttpPost]
-        public async Task<IActionResult> AddQuestion(int surveyId, [FromBody] CreateQuestionRequest request)
+        public async Task<IActionResult> AddQuestion(int surveyId, SurveyQuestionCreateDto request)
         {
-            if (!await _context.Surveys.AnyAsync(s => s.Id == surveyId))
+            if (await _surveyService.GetByIdAsync(surveyId) == null)
                 return NotFound("Survey not found.");
 
             if (string.IsNullOrWhiteSpace(request.QuestionText))
@@ -58,19 +60,21 @@ namespace CustomerSurveyAPI.Controllers
                 SurveyId = surveyId,
                 QuestionText = request.QuestionText,
                 QuestionType = request.QuestionType ?? "Text",
-                Options = request.Options
+                Options = request.Options,
+                IsRequired = request.IsRequired
             };
 
-            _context.SurveyQuestions.Add(question);
-            await _context.SaveChangesAsync();
+            var created = await _questionService.CreateAsync(question);
 
-            var dto = new QuestionDto
+            var dto = new SurveyQuestionReadDto
             {
-                Id = question.Id,
-                QuestionText = question.QuestionText,
-                QuestionType = question.QuestionType,
-                Options = question.Options,
-                AnswerCount = 0
+                Id = created.Id,
+                SurveyId = created.SurveyId,
+                QuestionText = created.QuestionText,
+                QuestionType = created.QuestionType,
+                Options = created.Options,
+                IsRequired = created.IsRequired,
+                AnswerCount = created.Answers?.Count ?? 0
             };
 
             return CreatedAtAction(nameof(GetQuestions), new { surveyId }, dto);
@@ -81,39 +85,16 @@ namespace CustomerSurveyAPI.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteQuestion(int surveyId, int id)
         {
-            var question = await _context.SurveyQuestions
-                .FirstOrDefaultAsync(q => q.SurveyId == surveyId && q.Id == id);
+            var question = await _questionService.GetByIdAsync(id);
 
-            if (question == null) return NotFound();
+            if (question == null || question.SurveyId != surveyId) return NotFound();
 
             // Remove answers first
-            var answers = await _context.SurveyAnswers
-                .Where(a => a.QuestionId == question.Id)
-                .ToListAsync();
-            if (answers.Any())
-                _context.SurveyAnswers.RemoveRange(answers);
+            await _answerService.DeleteByQuestionIdAsync(question.Id);
 
-            _context.SurveyQuestions.Remove(question);
-            await _context.SaveChangesAsync();
+            await _questionService.DeleteAsync(question.Id);
 
             return NoContent();
-        }
-
-        // DTOs
-        public class QuestionDto
-        {
-            public int Id { get; set; }
-            public string QuestionText { get; set; } = "";
-            public string QuestionType { get; set; } = "Text";
-            public string? Options { get; set; }
-            public int AnswerCount { get; set; }
-        }
-
-        public class CreateQuestionRequest
-        {
-            public string QuestionText { get; set; } = "";
-            public string? QuestionType { get; set; } = "Text";
-            public string? Options { get; set; }
         }
     }
 }

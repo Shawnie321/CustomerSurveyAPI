@@ -1,8 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
-using CustomerSurveyAPI.Data;
+﻿using CustomerSurveyAPI.DTOs;
 using CustomerSurveyAPI.Models;
+using CustomerSurveyAPI.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CustomerSurveyAPI.Controllers
 {
@@ -10,34 +10,37 @@ namespace CustomerSurveyAPI.Controllers
     [Route("api/[controller]")]
     public class SurveysController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly ISurveyService _surveyService;
 
-        public SurveysController(AppDbContext context)
+        public SurveysController(ISurveyService surveyService)
         {
-            _context = context;
+            _surveyService = surveyService;
         }
 
         // GET /api/surveys
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<object>>> GetSurveys()
+        public async Task<ActionResult<IEnumerable<SurveyReadDto>>> GetSurveys()
         {
-            var surveys = await _context.Surveys
-                .Include(s => s.Questions)
+            var surveys = (await _surveyService.GetAllAsync())
                 .OrderByDescending(s => s.CreatedAt)
-                .Select(s => new {
-                    s.Id,
-                    s.Title,
-                    s.Description,
-                    s.CreatedBy,
-                    s.CreatedAt,
-                    Questions = s.Questions.Select(q => new {
-                        q.Id,
-                        q.QuestionText,
-                        q.QuestionType,
-                        q.Options
-                    })
+                .Select(s => new SurveyReadDto
+                {
+                    Id = s.Id,
+                    Title = s.Title,
+                    Description = s.Description,
+                    CreatedBy = s.CreatedBy,
+                    CreatedAt = s.CreatedAt,
+                    Questions = s.Questions.Select(q => new SurveyQuestionReadDto
+                    {
+                        Id = q.Id,
+                        SurveyId = q.SurveyId,
+                        QuestionText = q.QuestionText,
+                        QuestionType = q.QuestionType,
+                        Options = q.Options,
+                        IsRequired = q.IsRequired
+                    }).ToList()
                 })
-                .ToListAsync();
+                .ToList();
 
             return Ok(surveys);
         }
@@ -46,32 +49,34 @@ namespace CustomerSurveyAPI.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetSurvey(int id)
         {
-            var survey = await _context.Surveys
-                .Include(s => s.Questions)
-                .Where(s => s.Id == id)
-                .Select(s => new {
-                    s.Id,
-                    s.Title,
-                    s.Description,
-                    s.CreatedBy,
-                    s.CreatedAt,
-                    Questions = s.Questions.OrderBy(q => q.Id).Select(q => new {
-                        q.Id,
-                        q.QuestionText,
-                        q.QuestionType,
-                        q.Options
-                    })
-                })
-                .FirstOrDefaultAsync();
+            var s = await _surveyService.GetByIdAsync(id);
+            if (s == null) return NotFound();
 
-            if (survey == null) return NotFound();
+            var survey = new SurveyReadDto
+            {
+                Id = s.Id,
+                Title = s.Title,
+                Description = s.Description,
+                CreatedBy = s.CreatedBy,
+                CreatedAt = s.CreatedAt,
+                Questions = s.Questions.OrderBy(q => q.Id).Select(q => new SurveyQuestionReadDto
+                {
+                    Id = q.Id,
+                    SurveyId = q.SurveyId,
+                    QuestionText = q.QuestionText,
+                    QuestionType = q.QuestionType,
+                    Options = q.Options,
+                    IsRequired = q.IsRequired
+                }).ToList()
+            };
+
             return Ok(survey);
         }
 
-        // POST /api/surveys  (Accepts Survey with Questions array)
+        // POST /api/surveys  (Accepts SurveyCreateDto with Questions array)
         [Authorize(Roles = "Admin")]
         [HttpPost]
-        public async Task<IActionResult> CreateSurvey([FromBody] Survey input)
+        public async Task<IActionResult> CreateSurvey(SurveyCreateDto input)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -83,7 +88,16 @@ namespace CustomerSurveyAPI.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            // Add questions if provided
+            // Always add the privacy agreement question
+            survey.Questions.Add(new SurveyQuestion
+            {
+                QuestionText = "Do you agree to the privacy terms and conditions?",
+                QuestionType = "MultipleChoice",
+                Options = "Yes,No",
+                IsRequired = true
+            });
+
+            // Add other questions if provided
             if (input.Questions != null && input.Questions.Any())
             {
                 foreach (var q in input.Questions)
@@ -92,46 +106,46 @@ namespace CustomerSurveyAPI.Controllers
                     {
                         QuestionText = q.QuestionText,
                         QuestionType = q.QuestionType,
-                        Options = q.Options
+                        Options = q.Options,
+                        IsRequired = q.IsRequired
                     });
                 }
             }
 
-            _context.Surveys.Add(survey);
-            await _context.SaveChangesAsync();
+            var created = await _surveyService.CreateAsync(survey);
 
-            // return the saved survey including generated IDs for questions
-            var result = await _context.Surveys
-                .Include(s => s.Questions)
-                .Where(s => s.Id == survey.Id)
-                .Select(s => new {
-                    s.Id,
-                    s.Title,
-                    s.Description,
-                    s.CreatedBy,
-                    s.CreatedAt,
-                    Questions = s.Questions.Select(q => new {
-                        q.Id,
-                        q.QuestionText,
-                        q.QuestionType,
-                        q.Options
-                    })
-                })
-                .FirstOrDefaultAsync();
+            // reload with includes to return DTO (service GetByIdAsync includes questions)
+            var result = await _surveyService.GetByIdAsync(created.Id);
 
-            return CreatedAtAction(nameof(GetSurvey), new { id = survey.Id }, result);
+            var dto = new SurveyReadDto
+            {
+                Id = result!.Id,
+                Title = result.Title,
+                Description = result.Description,
+                CreatedBy = result.CreatedBy,
+                CreatedAt = result.CreatedAt,
+                Questions = result.Questions.Select(q => new SurveyQuestionReadDto
+                {
+                    Id = q.Id,
+                    SurveyId = q.SurveyId,
+                    QuestionText = q.QuestionText,
+                    QuestionType = q.QuestionType,
+                    Options = q.Options,
+                    IsRequired = q.IsRequired
+                }).ToList()
+            };
+
+            return CreatedAtAction(nameof(GetSurvey), new { id = survey.Id }, dto);
         }
 
         [Authorize(Roles = "Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteSurvey(int id)
         {
-            var survey = await _context.Surveys.FindAsync(id);
-            if (survey == null) return NotFound();
+            var deleted = await _surveyService.DeleteAsync(id);
+            if (!deleted) return NotFound();
 
-            _context.Surveys.Remove(survey);
-            await _context.SaveChangesAsync();
             return NoContent();
         }
     }
-} 
+}

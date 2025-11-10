@@ -90,6 +90,9 @@ namespace CustomerSurveyAPI.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Options")
                         .HasColumnType("text");
 
@@ -225,7 +228,6 @@ namespace CustomerSurveyAPI.Migrations
                 {
                     b.Navigation("Answers");
                 });
-#pragma warning restore 612, 618
         }
     }
 }

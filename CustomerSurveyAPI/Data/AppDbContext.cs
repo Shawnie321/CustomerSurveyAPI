@@ -1,5 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
-using CustomerSurveyAPI.Models;
+﻿using CustomerSurveyAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace CustomerSurveyAPI.Data
 {

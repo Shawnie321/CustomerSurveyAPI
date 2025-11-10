@@ -1,8 +1,8 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 
-namespace CustomerSurveyAPI.Models
+namespace CustomerSurveyAPI.DTOs
 {
-    public class SurveyQuestion
+    public class SurveyQuestionReadDto
     {
         public int Id { get; set; }
 
@@ -17,8 +17,6 @@ namespace CustomerSurveyAPI.Models
 
         public bool IsRequired { get; set; } = false;
 
-        // Navigation
-        public Survey? Survey { get; set; }
-        public ICollection<SurveyAnswer> Answers { get; set; } = new List<SurveyAnswer>();
+        public int AnswerCount { get; set; } = 0;
     }
 }
