@@ -61,14 +61,9 @@ namespace CustomerSurveyAPI.Controllers
         }
 
         // ---------- LOGIN ----------
-        public class LoginRequest
-        {
-            public string Username { get; set; } = "";
-            public string Password { get; set; } = ""; // plain password in request
-        }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginRequest loginRequest)
+        public async Task<IActionResult> Login(LoginRequestDto loginRequest)
         {
             var user = await _userService.GetByUsernameAsync(loginRequest.Username);
 

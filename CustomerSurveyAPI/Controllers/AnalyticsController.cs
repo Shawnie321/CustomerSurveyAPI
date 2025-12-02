@@ -46,11 +46,11 @@ namespace CustomerSurveyAPI.Controllers
                 QuestionId = q.Id,
                 q.QuestionText,
                 AverageRating = q.Answers
-                    .Where(a => a.RatingValue.HasValue && a.SurveyResponse.ConsentGiven)
+                    .Where(a => a.RatingValue.HasValue && a.SurveyResponse != null && a.SurveyResponse.ConsentGiven)
                     .Select(a => a.RatingValue.GetValueOrDefault())
                     .DefaultIfEmpty(0)
                     .Average(),
-                ResponseCount = q.Answers.Count(a => a.SurveyResponse.ConsentGiven),
+                ResponseCount = q.Answers.Count(a => a.SurveyResponse != null && a.SurveyResponse.ConsentGiven),
                 Type = q.QuestionType
             });
 
