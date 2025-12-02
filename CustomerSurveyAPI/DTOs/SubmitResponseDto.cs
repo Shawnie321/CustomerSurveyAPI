@@ -6,5 +6,6 @@ namespace CustomerSurveyAPI.DTOs
     {
         public string Username { get; set; } = "Anonymous";
         public List<SubmitAnswerDto>? Answers { get; set; }
+        public bool ConsentGiven { get; set; }
     }
 }

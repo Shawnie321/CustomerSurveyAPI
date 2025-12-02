@@ -12,5 +12,7 @@ namespace CustomerSurveyAPI.DTOs
         public string Username { get; set; } = null!;
 
         public DateTime SubmittedAt { get; set; }
+
+        public bool ConsentGiven { get; set; }
     }
 }

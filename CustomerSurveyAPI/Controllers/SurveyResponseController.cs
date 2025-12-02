@@ -42,12 +42,17 @@ namespace CustomerSurveyAPI.Controllers
 
         // ---------- SUBMIT A RESPONSE ----------
         [HttpPost]
-        public async Task<IActionResult> PostResponse(int surveyId, [FromBody] SubmitResponseDto input)
+        public async Task<IActionResult> SubmitResponse(int surveyId, [FromBody] SubmitResponseDto input)
         {
             if (input == null) return BadRequest("Invalid payload.");
 
             var survey = await _surveyService.GetByIdAsync(surveyId);
             if (survey == null) return NotFound("Survey not found.");
+
+            if (!input.ConsentGiven)
+            {
+                return BadRequest("Consent is required to submit the survey.");
+            }
 
             // Optional: validate question IDs exist and belong to this survey
             var questionIds = (input.Answers ?? Enumerable.Empty<SubmitAnswerDto>())
@@ -91,7 +96,6 @@ namespace CustomerSurveyAPI.Controllers
                     }
                 }
             }
-
             var response = _mapper.Map<SurveyResponse>(input);
             response.SurveyId = surveyId;
             response.SubmittedAt = DateTime.UtcNow;

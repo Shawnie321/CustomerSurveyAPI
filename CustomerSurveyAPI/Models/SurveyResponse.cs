@@ -15,6 +15,7 @@ namespace CustomerSurveyAPI.Models
 
         // Navigation
         public Survey? Survey { get; set; }
+        public bool ConsentGiven { get; set; }
         public ICollection<SurveyAnswer> Answers { get; set; } = new List<SurveyAnswer>();
     }
 }

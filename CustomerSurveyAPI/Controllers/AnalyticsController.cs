@@ -25,7 +25,10 @@ namespace CustomerSurveyAPI.Controllers
             if (survey == null)
                 return NotFound("Survey not found.");
 
-            var allRatings = survey.Responses
+            // Only include responses with consent
+            var consentedResponses = survey.Responses.Where(r => r.ConsentGiven).ToList();
+
+            var allRatings = consentedResponses
                 .SelectMany(r => r.Answers)
                 .Where(a => a.RatingValue.HasValue)
                 .Select(a => a.RatingValue.GetValueOrDefault())
@@ -35,15 +38,19 @@ namespace CustomerSurveyAPI.Controllers
             var highest = allRatings.Any() ? allRatings.Max() : 0;
             var lowest = allRatings.Any() ? allRatings.Min() : 0;
 
-            var totalResponses = survey.Responses.Count;
+            var totalResponses = consentedResponses.Count;
 
-            // Breakdown by question
+            // Breakdown by question, only using consented answers
             var questionStats = survey.Questions.Select(q => new
             {
                 QuestionId = q.Id,
                 q.QuestionText,
-                AverageRating = q.Answers.Where(a => a.RatingValue.HasValue).Select(a => a.RatingValue.GetValueOrDefault()).DefaultIfEmpty(0).Average(),
-                ResponseCount = q.Answers.Count,
+                AverageRating = q.Answers
+                    .Where(a => a.RatingValue.HasValue && a.SurveyResponse.ConsentGiven)
+                    .Select(a => a.RatingValue.GetValueOrDefault())
+                    .DefaultIfEmpty(0)
+                    .Average(),
+                ResponseCount = q.Answers.Count(a => a.SurveyResponse.ConsentGiven),
                 Type = q.QuestionType
             });
 

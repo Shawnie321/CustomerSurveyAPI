@@ -7,10 +7,10 @@ namespace CustomerSurveyAPI.DTOs
         public int Id { get; set; }
 
         [Required, StringLength(100)]
-        public string Title { get; set; } = null!;
+        public string? Title { get; set; }
 
         [StringLength(500)]
-        public string Description { get; set; } = null!;
+        public string? Description { get; set; }
 
         [Required]
         public string CreatedBy { get; set; } = null!;
