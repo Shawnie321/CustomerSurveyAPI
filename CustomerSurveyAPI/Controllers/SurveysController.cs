@@ -88,15 +88,6 @@ namespace CustomerSurveyAPI.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            // Always add the privacy agreement question
-            survey.Questions.Add(new SurveyQuestion
-            {
-                QuestionText = "Do you agree to the privacy terms and conditions?",
-                QuestionType = "MultipleChoice",
-                Options = "Yes,No",
-                IsRequired = true
-            });
-
             // Add other questions if provided
             if (input.Questions != null && input.Questions.Any())
             {

@@ -81,7 +81,6 @@ namespace CustomerSurveyAPI.Controllers
         }
 
         // DELETE /api/surveys/{surveyId}/questions/{id}  (Admin)
-        [Authorize(Roles = "Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteQuestion(int surveyId, int id)
         {
