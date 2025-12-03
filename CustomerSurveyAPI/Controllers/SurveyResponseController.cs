@@ -15,7 +15,6 @@ namespace CustomerSurveyAPI.Controllers
         private readonly ISurveyService _surveyService;
         private readonly ISurveyQuestionService _questionService;
         private readonly IMapper _mapper;
-        private const string PrivacyQuestionText = "Do you agree to the privacy terms and conditions?";
 
         public SurveyResponsesController(ISurveyResponseService responseService, ISurveyService surveyService, ISurveyQuestionService questionService, IMapper mapper)
         {
