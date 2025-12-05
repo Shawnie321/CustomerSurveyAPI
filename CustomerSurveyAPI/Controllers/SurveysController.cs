@@ -129,6 +129,22 @@ namespace CustomerSurveyAPI.Controllers
             return CreatedAtAction(nameof(GetSurvey), new { id = survey.Id }, dto);
         }
 
+        // PUT /api/surveys/{id} (Admin only)
+        [Authorize(Roles = "Admin")]
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateSurvey(int id, SurveyUpdateDto input)
+        {
+            var survey = await _surveyService.GetByIdAsync(id);
+            if (survey == null) return NotFound();
+
+            survey.Title = input.Title;
+            survey.Description = input.Description;
+            var updated = await _surveyService.UpdateAsync(survey);
+            if (!updated) return StatusCode(500, "Failed to update survey.");
+
+            return NoContent();
+        }
+
         [Authorize(Roles = "Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteSurvey(int id)
