@@ -39,12 +39,64 @@ namespace CustomerSurveyAPI.Services
 
         public async Task<bool> UpdateAsync(Survey survey)
         {
-            var existing = await _context.Surveys.FindAsync(survey.Id);
+            var existing = await _context.Surveys
+                .Include(s => s.Questions)
+                .FirstOrDefaultAsync(s => s.Id == survey.Id);
+
             if (existing == null) return false;
 
             existing.Title = survey.Title;
             existing.Description = survey.Description;
-            // do not overwrite navigation collections here
+
+            if (survey.Questions != null)
+            {
+                var incoming = survey.Questions.ToList();
+
+                foreach (var inc in incoming)
+                {
+                    if (inc.Id > 0)
+                    {
+                        var existQ = existing.Questions.FirstOrDefault(q => q.Id == inc.Id);
+                        if (existQ != null)
+                        {
+                            existQ.QuestionText = inc.QuestionText;
+                            existQ.QuestionType = inc.QuestionType;
+                            existQ.Options = inc.Options;
+                            existQ.IsRequired = inc.IsRequired;
+                        }
+                        else
+                        {
+                            existing.Questions.Add(new SurveyQuestion
+                            {
+                                QuestionText = inc.QuestionText,
+                                QuestionType = inc.QuestionType,
+                                Options = inc.Options,
+                                IsRequired = inc.IsRequired
+                            });
+                        }
+                    }
+                    else
+                    {
+                        existing.Questions.Add(new SurveyQuestion
+                        {
+                            QuestionText = inc.QuestionText,
+                            QuestionType = inc.QuestionType,
+                            Options = inc.Options,
+                            IsRequired = inc.IsRequired
+                        });
+                    }
+                }
+
+                var incomingIds = incoming.Where(i => i.Id > 0).Select(i => i.Id).ToHashSet();
+                var toRemove = existing.Questions
+                    .Where(q => q.Id > 0 && !incomingIds.Contains(q.Id))
+                    .ToList();
+
+                foreach (var rem in toRemove)
+                {
+                    _context.Remove(rem);
+                }
+            }
 
             await _context.SaveChangesAsync();
             return true;

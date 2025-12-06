@@ -1,15 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CustomerSurveyAPI.DTOs
 {
     public class SurveyQuestionUpdateDto
     {
-        public int Id { get; set; }
-
-        [Required]
-        [ForeignKey("Survey")]
-        public int SurveyId { get; set; }
+        public int? Id { get; set; }
 
         [Required, StringLength(300)]
         public string QuestionText { get; set; } = null!;

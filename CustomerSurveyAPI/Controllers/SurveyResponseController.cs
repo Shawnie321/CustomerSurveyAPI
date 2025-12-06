@@ -39,6 +39,104 @@ namespace CustomerSurveyAPI.Controllers
             return Ok(result);
         }
 
+        // New: GET /api/surveys/{surveyId}/responses/user/me
+        // Returns the current authenticated user's response (latest) for this survey
+        [Authorize]
+        [HttpGet("user/me")]
+        public async Task<IActionResult> GetMyResponse(int surveyId)
+        {
+            var survey = await _surveyService.GetByIdAsync(surveyId);
+            if (survey == null) return NotFound("Survey not found.");
+
+            var username = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized();
+
+            var response = await _responseService.GetBySurveyAndUsernameAsync(surveyId, username);
+            if (response == null) return NotFound("Response not found for current user.");
+
+            var dto = _mapper.Map<SurveyResponseReadDto>(response);
+            return Ok(dto);
+        }
+
+        // New: GET /api/surveys/{surveyId}/responses/user/{username} (Admin only)
+        [Authorize(Roles = "Admin")]
+        [HttpGet("user/{username}")]
+        public async Task<IActionResult> GetUserResponse(int surveyId, string username)
+        {
+            var survey = await _surveyService.GetByIdAsync(surveyId);
+            if (survey == null) return NotFound("Survey not found.");
+
+            var response = await _responseService.GetBySurveyAndUsernameAsync(surveyId, username);
+            if (response == null) return NotFound("Response not found for user.");
+
+            var dto = _mapper.Map<SurveyResponseReadDto>(response);
+            return Ok(dto);
+        }
+
+        // ---------- NEW: endpoints that return only answers for reviewing ----------
+
+        // GET current user's answers for a survey (latest response)
+        [Authorize]
+        [HttpGet("user/me/answers")]
+        public async Task<IActionResult> GetMyAnswers(int surveyId)
+        {
+            var survey = await _surveyService.GetByIdAsync(surveyId);
+            if (survey == null) return NotFound("Survey not found.");
+
+            var username = User?.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(username)) return Unauthorized();
+
+            var response = await _responseService.GetBySurveyAndUsernameAsync(surveyId, username);
+            if (response == null) return NotFound("No submitted response found for current user.");
+
+            var answers = response.Answers?
+                .Select(a => _mapper.Map<SurveyAnswerReadDto>(a))
+                .ToList() ?? new List<SurveyAnswerReadDto>();
+
+            return Ok(answers);
+        }
+
+        // Admin: get a specific user's answers for a survey (latest response)
+        [Authorize(Roles = "Admin")]
+        [HttpGet("user/{username}/answers")]
+        public async Task<IActionResult> GetUserAnswers(int surveyId, string username)
+        {
+            var survey = await _surveyService.GetByIdAsync(surveyId);
+            if (survey == null) return NotFound("Survey not found.");
+
+            var response = await _responseService.GetBySurveyAndUsernameAsync(surveyId, username);
+            if (response == null) return NotFound("No submitted response found for user.");
+
+            var answers = response.Answers?
+                .Select(a => _mapper.Map<SurveyAnswerReadDto>(a))
+                .ToList() ?? new List<SurveyAnswerReadDto>();
+
+            return Ok(answers);
+        }
+
+        // Get answers by response id. Authenticated users can fetch their own; admins can fetch any.
+        [Authorize]
+        [HttpGet("{id}/answers")]
+        public async Task<IActionResult> GetAnswersByResponseId(int surveyId, int id)
+        {
+            var response = await _responseService.GetByIdAsync(id);
+            if (response == null || response.SurveyId != surveyId) return NotFound();
+
+            // Non-admins may only fetch their own answers
+            if (!User.IsInRole("Admin"))
+            {
+                var username = User?.Identity?.Name;
+                if (string.IsNullOrWhiteSpace(username) || !string.Equals(username, response.Username, StringComparison.Ordinal))
+                    return Forbid();
+            }
+
+            var answers = response.Answers?
+                .Select(a => _mapper.Map<SurveyAnswerReadDto>(a))
+                .ToList() ?? new List<SurveyAnswerReadDto>();
+
+            return Ok(answers);
+        }
+
         // ---------- SUBMIT A RESPONSE ----------
         [HttpPost]
         public async Task<IActionResult> SubmitResponse(int surveyId, [FromBody] SubmitResponseDto input)
@@ -95,20 +193,20 @@ namespace CustomerSurveyAPI.Controllers
                     }
                 }
             }
-            var response = _mapper.Map<SurveyResponse>(input);
-            response.SurveyId = surveyId;
-            response.SubmittedAt = DateTime.UtcNow;
+            var responseObj = _mapper.Map<SurveyResponse>(input);
+            responseObj.SurveyId = surveyId;
+            responseObj.SubmittedAt = DateTime.UtcNow;
 
             // ensure answers are sanitized
-            if (response.Answers != null)
+            if (responseObj.Answers != null)
             {
-                foreach (var a in response.Answers)
+                foreach (var a in responseObj.Answers)
                 {
                     a.AnswerText = string.IsNullOrWhiteSpace(a.AnswerText) ? null : a.AnswerText;
                 }
             }
 
-            var created = await _responseService.CreateAsync(response);
+            var created = await _responseService.CreateAsync(responseObj);
 
             var createdDto = _mapper.Map<SurveyResponseReadDto>(created);
 

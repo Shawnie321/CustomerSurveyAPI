@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
 
 namespace CustomerSurveyAPI.DTOs
 {
@@ -9,5 +10,7 @@ namespace CustomerSurveyAPI.DTOs
 
         [StringLength(500)]
         public string Description { get; set; } = string.Empty;
+
+        public List<SurveyQuestionUpdateDto>? Questions { get; set; }
     }
 }

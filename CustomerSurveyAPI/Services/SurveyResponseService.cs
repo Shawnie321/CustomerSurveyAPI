@@ -39,6 +39,31 @@ namespace CustomerSurveyAPI.Services
                 .FirstOrDefaultAsync(r => r.Id == id);
         }
 
+        // New: efficient fetch for a user's response on a given survey (returns latest if multiple)
+        public async Task<SurveyResponse?> GetBySurveyAndUsernameAsync(int surveyId, string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return null;
+
+            return await _context.SurveyResponses
+                .Where(r => r.SurveyId == surveyId && r.Username == username)
+                .Include(r => r.Answers)
+                    .ThenInclude(a => a.SurveyQuestion)
+                .OrderByDescending(r => r.SubmittedAt)
+                .FirstOrDefaultAsync();
+        }
+
+        // New: distinct survey ids that this username has submitted responses for
+        public async Task<IEnumerable<int>> GetCompletedSurveyIdsByUsernameAsync(string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return Enumerable.Empty<int>();
+
+            return await _context.SurveyResponses
+                .Where(r => r.Username == username)
+                .Select(r => r.SurveyId)
+                .Distinct()
+                .ToListAsync();
+        }
+
         public async Task<SurveyResponse> CreateAsync(SurveyResponse response)
         {
             _context.SurveyResponses.Add(response);

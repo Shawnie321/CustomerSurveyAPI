@@ -134,11 +134,29 @@ namespace CustomerSurveyAPI.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateSurvey(int id, SurveyUpdateDto input)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
             var survey = await _surveyService.GetByIdAsync(id);
             if (survey == null) return NotFound();
 
             survey.Title = input.Title;
             survey.Description = input.Description;
+
+            if (input.Questions != null)
+            {
+                var mapped = input.Questions.Select(q => new SurveyQuestion
+                {
+                    Id = q.Id ?? 0,
+                    SurveyId = survey.Id,
+                    QuestionText = q.QuestionText,
+                    QuestionType = q.QuestionType,
+                    Options = q.Options,
+                    IsRequired = q.IsRequired
+                }).ToList();
+
+                survey.Questions = mapped;
+            }
+
             var updated = await _surveyService.UpdateAsync(survey);
             if (!updated) return StatusCode(500, "Failed to update survey.");
 
