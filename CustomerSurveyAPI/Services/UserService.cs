@@ -44,6 +44,15 @@ namespace CustomerSurveyAPI.Services
             existing.PasswordHash = user.PasswordHash;
             existing.Role = user.Role;
 
+            // propagate newly added properties
+            existing.FirstName = user.FirstName;
+            existing.MiddleName = user.MiddleName;
+            existing.LastName = user.LastName;
+            existing.Email = user.Email;
+            existing.PhoneNumber = user.PhoneNumber;
+            existing.DateOfBirth = user.DateOfBirth;
+
+            // keep CreatedAt as the original creation timestamp (do not overwrite)
             await _context.SaveChangesAsync();
             return true;
         }

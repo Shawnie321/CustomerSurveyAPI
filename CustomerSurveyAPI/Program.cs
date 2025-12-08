@@ -81,4 +81,29 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 
+// Seed admin user
+using (var scope = app.Services.CreateScope())
+{
+    var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
+
+    var adminUser = cfg["AdminUser:Username"];
+    var adminPass = cfg["AdminUser:Password"];
+    if (!string.IsNullOrWhiteSpace(adminUser) && !string.IsNullOrWhiteSpace(adminPass))
+    {
+        var existing = await userService.GetByUsernameAsync(adminUser);
+        if (existing == null)
+        {
+            var admin = new CustomerSurveyAPI.Models.User
+            {
+                Username = adminUser,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPass),
+                Role = "Admin",
+                CreatedAt = DateTime.UtcNow
+            };
+            await userService.CreateAsync(admin);
+        }
+    }
+}
+
 app.Run();

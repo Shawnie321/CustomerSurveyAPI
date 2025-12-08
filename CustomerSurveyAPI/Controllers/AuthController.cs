@@ -1,6 +1,7 @@
 ﻿using CustomerSurveyAPI.DTOs;
 using CustomerSurveyAPI.Models;
 using CustomerSurveyAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -31,9 +32,16 @@ namespace CustomerSurveyAPI.Controllers
 
             var user = new User
             {
+                FirstName = userRequest.FirstName,
+                MiddleName = userRequest.MiddleName,
+                LastName = userRequest.LastName,
                 Username = userRequest.Username,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(userRequest.PasswordHash),
-                Role = "User"
+                Email = userRequest.Email,
+                PhoneNumber = userRequest.PhoneNumber,
+                DateOfBirth = userRequest.DateOfBirth,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(userRequest.Password),
+                Role = "User",
+                CreatedAt = DateTime.UtcNow
             };
 
             await _userService.CreateAsync(user);
@@ -42,6 +50,7 @@ namespace CustomerSurveyAPI.Controllers
         }
 
         // ---------- ADMIN REGISTRATION ----------
+        [Authorize(Roles = "Admin")]
         [HttpPost("register-admin")]
         public async Task<IActionResult> RegisterAdmin(UserCreateDto adminRequest)
         {
@@ -51,8 +60,9 @@ namespace CustomerSurveyAPI.Controllers
             var admin = new User
             {
                 Username = adminRequest.Username,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminRequest.PasswordHash),
-                Role = "Admin"
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminRequest.Password),
+                Role = "Admin",
+                CreatedAt = DateTime.UtcNow
             };
 
             await _userService.CreateAsync(admin);
@@ -61,7 +71,6 @@ namespace CustomerSurveyAPI.Controllers
         }
 
         // ---------- LOGIN ----------
-
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginRequestDto loginRequest)
         {

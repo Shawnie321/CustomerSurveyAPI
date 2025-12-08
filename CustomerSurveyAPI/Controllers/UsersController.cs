@@ -1,3 +1,5 @@
+using AutoMapper;
+using CustomerSurveyAPI.DTOs;
 using CustomerSurveyAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,10 +11,26 @@ namespace CustomerSurveyAPI.Controllers
     public class UsersController : ControllerBase
     {
         private readonly ISurveyResponseService _responseService;
+        private readonly IUserService _userService;
+        private readonly IMapper _mapper;
 
-        public UsersController(ISurveyResponseService responseService)
+        public UsersController(
+            ISurveyResponseService responseService,
+            IUserService userService,
+            IMapper mapper)
         {
             _responseService = responseService;
+            _userService = userService;
+            _mapper = mapper;
+        }
+
+        // Admin-only: GET /api/users
+        [HttpGet]
+        public async Task<IActionResult> GetAllUser()
+        {
+            var users = await _userService.GetAllAsync();
+            var result = _mapper.Map<IEnumerable<UserReadDto>>(users);
+            return Ok(result);
         }
 
         // GET /api/users/me/completed-surveys
