@@ -57,7 +57,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowSpecificOrigins,
         policy =>
         {
-            policy.WithOrigins("http://localhost:5173") // your React dev URL
+            policy.WithOrigins("https://survey-frontend-virid.vercel.app/") // your React dev URL
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
